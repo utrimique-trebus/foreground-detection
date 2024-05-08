@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
-use image::{GenericImageView, RgbaImage, Rgba};
+use image::{GenericImageView, RgbaImage, Rgba, DynamicImage};
+use std::path::Path;
 
 const EDGE_THRESHOLD: i32 = 255;
 // const DIRECTIONS: [(i32, i32); 8] = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)];
@@ -34,9 +35,13 @@ fn bfs(source_node: usize, sink_node: usize, parent: &mut Vec<i32>, graph: &Vec<
 fn calculate_max_flow(node_count: usize, source_node: usize, sink_node: usize, graph: &Vec<Vec<usize>>, capacity: &mut Vec<Vec<i32>>) -> Vec<bool> {
     let mut parent: Vec<i32> = vec![0; node_count + 2];
 
+    // let mut flow = 0;
+
     loop {
         let new_flow = bfs(source_node, sink_node, &mut parent, graph, capacity);
         if new_flow == 0 { break; }
+
+        // flow += new_flow;
 
         let mut curr = sink_node;
         while curr != source_node {
@@ -46,8 +51,6 @@ fn calculate_max_flow(node_count: usize, source_node: usize, sink_node: usize, g
             curr = prev as usize;
         }
     }
-
-    // println!("Calculated flow is {}", flow);
 
     // Find nodes reachable from the source after the flow is calculated
     let mut visited = vec![false; node_count + 2];
@@ -69,20 +72,17 @@ fn calculate_max_flow(node_count: usize, source_node: usize, sink_node: usize, g
 }
 
 fn capacity_function(first: u8, second: u8) -> i32 {
+    // TODO: Maybe change this when we are talking about white pixels
     if first == second { return EDGE_THRESHOLD; }
+
     EDGE_THRESHOLD / first.abs_diff(second) as i32
 }
 
-fn main() {
-    let mut image = image::open("D:\\University\\Graph\\lab5_rust\\src\\test.png").unwrap();
-    let grayscale = image.grayscale();
-
+fn assemble_edges_from_image(grayscale: &DynamicImage,
+                             graph: &mut Vec<Vec<usize>>,
+                             capacity: &mut Vec<Vec<i32>>,
+                             source_node: usize, sink_node: usize) {
     let (width, height) = grayscale.dimensions();
-
-    let node_count: usize = (width * height) as usize;
-    let mut graph: Vec<Vec<usize>> = vec![vec![]; node_count + 2];
-    let mut capacity: Vec<Vec<i32>> = vec![vec![0; node_count + 2]; node_count + 2];
-    let (source_node, sink_node) = (0usize, node_count + 1);
 
     // Construct graph based on the differences between grayscale values
     let mut current_node = 1;
@@ -156,16 +156,30 @@ fn main() {
         }
     }
 
-    // Add in source and sink node connections
-    // TODO: add connection to the left side of the image
+    // Wire in source and sink node connections
     for i in 0..width {
-        graph[source_node].push((i + 1) as usize);
-        capacity[source_node][(i + 1) as usize] = EDGE_THRESHOLD;
+        let to = (i + 1) as usize;
+        graph[source_node].push(to);
+        capacity[source_node][to] = EDGE_THRESHOLD;
 
         let s = ((height - 1) * width + i) as usize;
         graph[s].push(sink_node);
         capacity[s][sink_node] = EDGE_THRESHOLD;
     }
+}
+
+fn determine_foreground(input_path: &Path) {
+    let mut image = image::open(input_path).unwrap();
+    let grayscale = image.grayscale();
+
+    let (width, height) = grayscale.dimensions();
+
+    let node_count: usize = (width * height) as usize;
+    let mut graph: Vec<Vec<usize>> = vec![vec![]; node_count + 2];
+    let mut capacity: Vec<Vec<i32>> = vec![vec![0; node_count + 2]; node_count + 2];
+    let (source_node, sink_node) = (0usize, node_count + 1);
+
+    assemble_edges_from_image(&grayscale, &mut graph, &mut capacity, source_node, sink_node);
 
     let visited_nodes = calculate_max_flow(node_count, source_node, sink_node, &graph, &mut capacity);
 
@@ -175,11 +189,20 @@ fn main() {
         for col in 0..width {
             let pixel_value = visited_nodes[(height * row + col) as usize];
 
-            let pixel_color = if pixel_value { Rgba([255, 0, 0, 60]) } else { Rgba([255, 255, 255, 255]) };
+            let pixel_color = if pixel_value { Rgba([255, 0, 0, 60]) } else { Rgba([255, 255, 255, 60]) };
             foreground.put_pixel(col, row, pixel_color);
         }
     }
 
     image::imageops::overlay(&mut image, &mut foreground, 0, 0);
-    image.save("output.png").unwrap();
+
+    let img_name = input_path.file_stem().unwrap().to_str().unwrap();
+    let new_name = format!("{}_detection", img_name);
+
+    let output_path = Path::new(&new_name).with_extension("png");
+    image.save(output_path).unwrap();
+}
+
+fn main() {
+    determine_foreground(Path::new(".\\test_images\\test4.png"));
 }
