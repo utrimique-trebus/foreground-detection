@@ -1,9 +1,9 @@
 use std::collections::VecDeque;
 use image::{GenericImageView, RgbaImage, Rgba, DynamicImage};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::fs;
 
 const EDGE_THRESHOLD: i32 = 255;
-// const DIRECTIONS: [(i32, i32); 8] = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)];
 
 fn bfs(source_node: usize, sink_node: usize, parent: &mut Vec<i32>, graph: &Vec<Vec<usize>>, capacity: &Vec<Vec<i32>>) -> i32 {
     parent.fill(-1);
@@ -72,10 +72,8 @@ fn calculate_max_flow(node_count: usize, source_node: usize, sink_node: usize, g
 }
 
 fn capacity_function(first: u8, second: u8) -> i32 {
-    // TODO: Maybe change this when we are talking about white pixels
     if first == second { return EDGE_THRESHOLD; }
-
-    EDGE_THRESHOLD / first.abs_diff(second) as i32
+    (EDGE_THRESHOLD / (first as i32 - second as i32)).pow(2)
 }
 
 fn assemble_edges_from_image(grayscale: &DynamicImage,
@@ -168,13 +166,13 @@ fn assemble_edges_from_image(grayscale: &DynamicImage,
     }
 }
 
-fn determine_foreground(input_path: &Path) {
+fn determine_foreground(input_path: &PathBuf) {
     let mut image = image::open(input_path).unwrap();
     let grayscale = image.grayscale();
 
     let (width, height) = grayscale.dimensions();
 
-    let node_count: usize = (width * height) as usize;
+    let node_count = (width * height) as usize;
     let mut graph: Vec<Vec<usize>> = vec![vec![]; node_count + 2];
     let mut capacity: Vec<Vec<i32>> = vec![vec![0; node_count + 2]; node_count + 2];
     let (source_node, sink_node) = (0usize, node_count + 1);
@@ -204,5 +202,6 @@ fn determine_foreground(input_path: &Path) {
 }
 
 fn main() {
-    determine_foreground(Path::new(".\\test_images\\test4.png"));
+    let paths = fs::read_dir("./test_images").unwrap();
+    paths.for_each(|path| determine_foreground(&path.unwrap().path()));
 }
